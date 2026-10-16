@@ -1,0 +1,155 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  slug String @unique @db.VarChar(100)
+  name String @db.VarChar(200)
+  createdAt DateTime @default(now())
+  people Person[]
+  memberships Membership[]
+  units OrganizationalUnit[]
+  participations Participation[]
+  definitions ResponsibilityDefinition[]
+  assignments ResponsibilityAssignment[]
+  accesses OrganizationAccess[]
+  auditEntries AuditEntry[]
+  outboxEvents OutboxEvent[]
+}
+
+model UserAccount {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique @db.VarChar(320)
+  passwordHash String? @db.Text
+  createdAt DateTime @default(now())
+  accesses OrganizationAccess[]
+}
+
+model OrganizationAccess {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId String @db.Uuid
+  status String @default("ACTIVE") @db.VarChar(30)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  user UserAccount @relation(fields:[userId],references:[id],onDelete:Restrict)
+  @@unique([organizationId,userId])
+  @@index([userId,status])
+}
+
+model Person {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  fullName String @db.VarChar(200)
+  phone String? @db.VarChar(50)
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  memberships Membership[]
+  participations Participation[]
+  @@unique([organizationId,id])
+  @@index([organizationId,fullName])
+}
+
+model Membership {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  personId String @db.Uuid
+  memberCode String? @db.VarChar(50)
+  status String @default("ACTIVE") @db.VarChar(30)
+  joinedAt DateTime @default(now())
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  person Person @relation(fields:[organizationId,personId],references:[organizationId,id],onDelete:Restrict)
+  @@unique([organizationId,id])
+  @@unique([organizationId,personId])
+  @@unique([organizationId,memberCode])
+}
+
+model OrganizationalUnit {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String @db.VarChar(200)
+  classification String @db.VarChar(80)
+  status String @default("ACTIVE") @db.VarChar(30)
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  participations Participation[]
+  definitions ResponsibilityDefinition[]
+  @@unique([organizationId,id])
+  @@index([organizationId,status,name])
+}
+
+model Participation {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  personId String @db.Uuid
+  unitId String @db.Uuid
+  status String @default("ACTIVE") @db.VarChar(30)
+  startedAt DateTime @default(now())
+  endedAt DateTime?
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  person Person @relation(fields:[organizationId,personId],references:[organizationId,id],onDelete:Restrict)
+  unit OrganizationalUnit @relation(fields:[organizationId,unitId],references:[organizationId,id],onDelete:Restrict)
+  assignments ResponsibilityAssignment[]
+  @@unique([organizationId,id])
+  @@unique([organizationId,id,unitId])
+  @@index([organizationId,personId,status])
+  @@index([organizationId,unitId,status])
+}
+
+model ResponsibilityDefinition {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  unitId String @db.Uuid
+  kind String @db.VarChar(20)
+  title String @db.VarChar(150)
+  status String @default("ACTIVE") @db.VarChar(30)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  unit OrganizationalUnit @relation(fields:[organizationId,unitId],references:[organizationId,id],onDelete:Restrict)
+  assignments ResponsibilityAssignment[]
+  @@unique([organizationId,id])
+  @@unique([organizationId,id,unitId])
+  @@index([organizationId,unitId,kind])
+}
+
+model ResponsibilityAssignment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  unitId String @db.Uuid
+  participationId String @db.Uuid
+  definitionId String @db.Uuid
+  status String @default("ACTIVE") @db.VarChar(30)
+  assignedAt DateTime @default(now())
+  endedAt DateTime?
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  participation Participation @relation(fields:[organizationId,participationId,unitId],references:[organizationId,id,unitId],onDelete:Restrict)
+  definition ResponsibilityDefinition @relation(fields:[organizationId,definitionId,unitId],references:[organizationId,id,unitId],onDelete:Restrict)
+  @@unique([organizationId,id])
+  @@index([organizationId,unitId,status])
+  @@index([organizationId,participationId,status])
+}
+
+model AuditEntry {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  actorUserId String? @db.Uuid
+  action String @db.VarChar(120)
+  resourceType String @db.VarChar(80)
+  resourceId String @db.Uuid
+  metadata Json?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  @@index([organizationId,createdAt])
+}
+
+model OutboxEvent {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  eventType String @db.VarChar(120)
+  aggregateId String @db.Uuid
+  payload Json
+  createdAt DateTime @default(now())
+  publishedAt DateTime?
+  attempts Int @default(0)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  @@index([publishedAt,createdAt])
+  @@index([organizationId,createdAt])
+}
